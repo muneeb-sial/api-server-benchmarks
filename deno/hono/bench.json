@@ -1,0 +1,7 @@
+{
+  "build": ["deno install"],
+  "start": ["deno", "serve", "-A", "--cached-only", "--parallel", "--host", "127.0.0.1", "--port", "${PORT}",
+            "--v8-flags=--max-old-space-size=${WORKER_HEAP_MB}", "main.ts"],
+  "env": { "DENO_JOBS": "${WORKERS}", "NODE_ENV": "production" },
+  "notes": "deno serve --parallel, DENO_JOBS = WORKERS"
+}

@@ -1,0 +1,7 @@
+{
+  "build": ["deno install", "deno task build"],
+  "start": ["deno", "run", "-A", "--cached-only", "--v8-flags=--max-old-space-size=${HEAP_MB}", "dist/main.js"],
+  "env": { "NODE_ENV": "production" },
+  "maxWorkers": 1,
+  "notes": "single process: node:cluster is not available in Deno"
+}
