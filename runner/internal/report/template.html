@@ -1,0 +1,612 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API Benchmarks</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface-1: #fcfcfb;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --wash: rgba(11,11,11,0.04);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #6250d6;
+  --series-8: #e34948;
+  --good: #0ca30c;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+  --good-text: #006300;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #f0efec;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255,255,255,0.10);
+    --wash: rgba(255,255,255,0.05);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+    --good-text: #0ca30c;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface-1: #1a1a19;
+  --text-primary: #f0efec;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255,255,255,0.10);
+  --wash: rgba(255,255,255,0.05);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-8: #e66767;
+  --good-text: #0ca30c;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--page); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+main { max-width: 1280px; margin: 0 auto; padding: 24px 16px 64px; }
+header { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+h1 { font-size: 22px; margin: 0 0 4px; font-weight: 650; }
+h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.meta { color: var(--text-secondary); font-size: 13px; }
+button, select {
+  font: inherit; color: var(--text-primary); background: var(--surface-1);
+  border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; cursor: pointer;
+}
+button:hover, select:hover { background: var(--wash); }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin: 20px 0; }
+.group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.group > .label { color: var(--text-muted); font-size: 12px; margin-right: 2px; }
+.chip {
+  border: 1px solid var(--border); border-radius: 999px; padding: 3px 11px; background: var(--surface-1);
+  cursor: pointer; user-select: none; font-size: 13px; color: var(--text-secondary);
+}
+.chip[aria-pressed="true"] { background: var(--text-primary); color: var(--surface-1); border-color: var(--text-primary); }
+.chip .key { vertical-align: middle; margin-right: 6px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; }
+.tile { padding: 14px 16px; }
+.tile .label { color: var(--text-secondary); font-size: 13px; }
+.tile .value { font-size: 26px; font-weight: 600; margin: 2px 0; }
+.tile .who { color: var(--text-secondary); font-size: 13px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr)); gap: 12px; margin-bottom: 16px; }
+.card { padding: 14px 16px; min-width: 0; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.card .sub { color: var(--text-muted); font-size: 12px; }
+.canvas-wrap { position: relative; }
+.section-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 8px; margin: 28px 0 10px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+.legend span::before { content: ""; display: inline-block; width: 14px; height: 2px; vertical-align: middle; margin-right: 6px; background: var(--c); border-radius: 1px; }
+.legend em { font-style: normal; color: var(--text-muted); }
+.table-wrap { overflow-x: auto; background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 7px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--grid); }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+th { color: var(--text-secondary); font-weight: 600; cursor: pointer; position: sticky; top: 0; background: var(--surface-1); }
+th[aria-sort="ascending"]::after { content: " ▲"; font-size: 9px; }
+th[aria-sort="descending"]::after { content: " ▼"; font-size: 9px; }
+td { font-variant-numeric: tabular-nums; }
+tr:hover td { background: var(--wash); }
+.status { display: inline-flex; align-items: center; gap: 5px; }
+.status i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); display: inline-block; }
+.note { color: var(--text-muted); font-size: 12px; white-space: normal; display: inline-block; min-width: 260px; max-width: 360px; text-align: left; }
+.empty { color: var(--text-muted); padding: 24px; text-align: center; }
+footer { color: var(--text-muted); font-size: 12px; margin-top: 24px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>API Benchmarks</h1>
+      <div class="meta" id="meta"></div>
+    </div>
+    <button id="theme" type="button" aria-label="Toggle dark mode">Theme</button>
+  </header>
+
+  <div class="filters">
+    <div class="group" id="scenarios"><span class="label">Scenario</span></div>
+    <div class="group" id="runtimes"><span class="label">Runtime</span></div>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="card-head"><h2 id="barTitleA"></h2><select id="metricA" aria-label="Metric for left chart"></select></div>
+      <div class="canvas-wrap" id="wrapA"><canvas id="barA"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-head"><h2 id="barTitleB"></h2><select id="metricB" aria-label="Metric for right chart"></select></div>
+      <div class="canvas-wrap" id="wrapB"><canvas id="barB"></canvas></div>
+    </div>
+  </div>
+
+  <div class="section-head">
+    <h2>Over time</h2>
+    <span class="sub meta">Click a name to hide or show it. Hover a line to identify it.</span>
+  </div>
+  <div class="group" id="picker" style="margin-bottom:10px"></div>
+  <div class="legend" id="tsLegend"></div>
+  <div class="grid2">
+    <div class="card"><div class="card-head"><h2>Requests per second</h2></div><div class="canvas-wrap" style="height:240px"><canvas id="tsRps"></canvas></div></div>
+    <div class="card"><div class="card-head"><h2>Mean latency (ms)</h2><span class="sub">per-second window</span></div><div class="canvas-wrap" style="height:240px"><canvas id="tsLat"></canvas></div></div>
+    <div class="card"><div class="card-head"><h2>CPU (cores busy)</h2><span class="sub">whole process tree</span></div><div class="canvas-wrap" style="height:240px"><canvas id="tsCpu"></canvas></div></div>
+    <div class="card"><div class="card-head"><h2>Memory (MB)</h2><span class="sub">resident, whole process tree</span></div><div class="canvas-wrap" style="height:240px"><canvas id="tsMem"></canvas></div></div>
+  </div>
+
+  <div class="section-head"><h2>All results</h2><span class="sub meta">Click a column to sort</span></div>
+  <div class="table-wrap"><table id="table"></table></div>
+
+  <footer id="footer"></footer>
+</main>
+
+<script>
+const RUN = __BENCH_DATA__;
+
+// ------------------------------------------------------------------ data
+const results = (RUN.results || []).map(r => {
+  const k = r.k6 || {};
+  const res = r.resources || {};
+  return {
+    ...r,
+    rps: k.rps, p50: k.p50, p90: k.p90, p95: k.p95, p99: k.p99, min: k.min, max: k.max, avg: k.avg,
+    // bad_responses counts each failing response once; older runs only have failed_requests.
+    errors: k.rps == null ? null : (k.bad_responses ?? k.failed_requests ?? 0),
+    requests: k.requests,
+    cpu: res.avg_cpu, peakCpu: res.peak_cpu, mem: res.peak_mem, avgMem: res.avg_mem,
+    idleMem: res.idle_mem, commit: res.peak_commit,
+    perCore: k.rps != null && res.avg_cpu > 0.05 ? k.rps / res.avg_cpu : null,
+  };
+});
+
+const METRICS = {
+  rps:     { label: 'Requests per second', short: 'RPS', better: 'high', fmt: n => fmtInt(n) },
+  perCore: { label: 'RPS per CPU core',    short: 'RPS/core', better: 'high', fmt: n => fmtInt(n) },
+  p50:     { label: 'p50 latency (ms)',    short: 'p50', better: 'low', fmt: fmtMs },
+  p95:     { label: 'p95 latency (ms)',    short: 'p95', better: 'low', fmt: fmtMs },
+  p99:     { label: 'p99 latency (ms)',    short: 'p99', better: 'low', fmt: fmtMs },
+  max:     { label: 'Max latency (ms)',    short: 'max', better: 'low', fmt: fmtMs },
+  errors:  { label: 'Errors (total)',      short: 'errors', better: 'low', fmt: n => fmtInt(n) },
+  cpu:     { label: 'Avg CPU (cores)',     short: 'CPU', better: 'low', fmt: n => n.toFixed(2) },
+  mem:     { label: 'Peak memory (MB)',    short: 'peak mem', better: 'low', fmt: n => fmtInt(n) },
+  idleMem: { label: 'Idle memory (MB)',    short: 'idle mem', better: 'low', fmt: n => fmtInt(n) },
+  startup_ms: { label: 'Startup time (ms)', short: 'startup', better: 'low', fmt: n => fmtInt(n) },
+};
+
+function fmtInt(n) { return n == null ? '–' : Math.round(n).toLocaleString('en-US'); }
+function fmtMs(n) { return n == null ? '–' : (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(1) : Math.round(n).toLocaleString('en-US')); }
+function compact(n) {
+  const a = Math.abs(n);
+  if (a >= 1e6) return (n / 1e6).toFixed(a >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+  if (a >= 1e4) return (n / 1e3).toFixed(0) + 'K';
+  return n.toLocaleString('en-US');
+}
+
+const scenarios = [...new Set(results.map(r => r.scenario))];
+const runtimes = [...new Set(results.map(r => r.runtime))].sort();
+const state = {
+  scenario: scenarios[0],
+  runtimes: new Set(runtimes),
+  metricA: 'rps', metricB: 'mem',
+  picked: null, // server names for time series
+  sort: { key: 'rps', dir: 'descending' },
+};
+
+function visible() {
+  return results.filter(r => r.scenario === state.scenario && state.runtimes.has(r.runtime));
+}
+function measured() { return visible().filter(r => r.rps != null); }
+
+// ------------------------------------------------------------------ theme
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+const SLOTS = ['--series-1', '--series-2', '--series-3', '--series-4', '--series-5', '--series-6', '--series-7', '--series-8'];
+const DASHES = [[], [6, 4], [2, 3], [10, 3, 2, 3], [1, 3], [14, 4]];
+
+// Time axes stop at the configured test length; a stalled server keeps k6
+// waiting long after it, which would squash everyone else's lines.
+const DURATION_S = parseDuration(((RUN.meta || {}).k6 || {}).duration || '');
+function parseDuration(s) {
+  let t = 0, m;
+  const re = /(\d+(?:\.\d+)?)(ms|h|m|s)/g;
+  while ((m = re.exec(s))) t += +m[1] * { ms: 0.001, s: 1, m: 60, h: 3600 }[m[2]];
+  return t || null;
+}
+
+document.getElementById('theme').addEventListener('click', () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  root.dataset.theme = dark ? 'light' : 'dark';
+  renderCharts();
+});
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderCharts);
+
+// ------------------------------------------------------------------ header & filters
+(function header() {
+  const m = RUN.meta || {};
+  const k = m.k6 || {};
+  const load = k.executor === 'constant-arrival-rate' ? `${fmtInt(k.rate)} req/s target` : `${k.vus} VUs`;
+  document.getElementById('meta').textContent =
+    `${new Date(m.started).toLocaleString()} · ${m.host || ''} · ${m.os || ''} · ${m.cpus} logical CPUs · ` +
+    `k6 ${load}, ${k.duration} (+${k.warmup} warmup)` + (k.cpus ? ` on CPUs ${k.cpus}` : '');
+  document.getElementById('footer').textContent =
+    'Latency is measured by k6 on the same host. On Windows, k6 timers resolve to about 0.5 ms, so sub-millisecond percentiles are coarse. ' +
+    'Memory is the resident working set summed over every process in the server tree; the cap is enforced on committed memory with a Job Object.';
+
+  const sc = document.getElementById('scenarios');
+  for (const s of scenarios) {
+    const b = chip(s === 'text' ? 'Plain text' : s === 'json' ? 'JSON' : s, s === state.scenario);
+    b.addEventListener('click', () => {
+      state.scenario = s; state.picked = null;
+      [...sc.querySelectorAll('.chip')].forEach(c => c.setAttribute('aria-pressed', c === b));
+      render();
+    });
+    sc.appendChild(b);
+  }
+  const rt = document.getElementById('runtimes');
+  for (const r of runtimes) {
+    const b = chip(r, true);
+    b.addEventListener('click', () => {
+      state.runtimes.has(r) ? state.runtimes.delete(r) : state.runtimes.add(r);
+      b.setAttribute('aria-pressed', state.runtimes.has(r));
+      state.picked = null;
+      render();
+    });
+    rt.appendChild(b);
+  }
+  for (const id of ['metricA', 'metricB']) {
+    const sel = document.getElementById(id);
+    for (const [key, m] of Object.entries(METRICS)) {
+      const o = document.createElement('option');
+      o.value = key; o.textContent = m.label;
+      sel.appendChild(o);
+    }
+    sel.value = state[id];
+    sel.addEventListener('change', () => { state[id] = sel.value; renderBars(); });
+  }
+})();
+
+function chip(text, pressed) {
+  const b = document.createElement('button');
+  b.type = 'button'; b.className = 'chip'; b.textContent = text;
+  b.setAttribute('aria-pressed', pressed);
+  return b;
+}
+
+// ------------------------------------------------------------------ tiles
+function renderTiles() {
+  const rows = measured().filter(r => r.status === 'ok');
+  const best = (key, better) => rows.filter(r => r[key] != null)
+    .sort((a, b) => better === 'high' ? b[key] - a[key] : a[key] - b[key])[0];
+  const tiles = [
+    ['Highest throughput', 'rps', v => fmtInt(v) + ' rps'],
+    ['Lowest p99 latency', 'p99', v => fmtMs(v) + ' ms'],
+    ['Lowest peak memory', 'mem', v => fmtInt(v) + ' MB'],
+    ['Most RPS per CPU core', 'perCore', v => fmtInt(v)],
+  ];
+  document.getElementById('tiles').innerHTML = tiles.map(([label, key, f]) => {
+    const r = best(key, METRICS[key].better);
+    return `<div class="tile"><div class="label">${label}</div>` +
+      (r ? `<div class="value">${f(r[key])}</div><div class="who">${esc(r.server)}</div>`
+         : `<div class="value">–</div><div class="who">no successful runs</div>`) + `</div>`;
+  }).join('');
+}
+
+// ------------------------------------------------------------------ bar charts
+const charts = {};
+function destroy(id) { if (charts[id]) { charts[id].destroy(); delete charts[id]; } }
+
+function baseScales(valueAxis, fmtTick) {
+  const grid = { color: css('--grid'), lineWidth: 1, drawTicks: false };
+  const ticks = { color: css('--text-muted'), font: { size: 11 } };
+  return {
+    [valueAxis]: { grid, border: { color: css('--axis') }, ticks: { ...ticks, callback: fmtTick, padding: 6 }, beginAtZero: true },
+  };
+}
+
+function tooltipStyle() {
+  return {
+    backgroundColor: css('--surface-1'), titleColor: css('--text-primary'), bodyColor: css('--text-secondary'),
+    borderColor: css('--border'), borderWidth: 1, padding: 10, cornerRadius: 8, boxPadding: 4,
+    titleFont: { weight: '600' }, usePointStyle: true,
+  };
+}
+
+function renderBar(canvasId, wrapId, titleId, key) {
+  const m = METRICS[key];
+  document.getElementById(titleId).textContent = m.label;
+  const rows = measured().filter(r => r[key] != null)
+    .sort((a, b) => m.better === 'high' ? b[key] - a[key] : a[key] - b[key]);
+  destroy(canvasId);
+  const wrap = document.getElementById(wrapId);
+  wrap.style.height = Math.max(120, rows.length * 26 + 40) + 'px';
+  if (!rows.length) { wrap.innerHTML = '<div class="empty">No data for this filter</div>'; return; }
+  if (!wrap.querySelector('canvas')) wrap.innerHTML = `<canvas id="${canvasId}"></canvas>`;
+  charts[canvasId] = new Chart(document.getElementById(canvasId), {
+    type: 'bar',
+    data: {
+      labels: rows.map(r => r.server),
+      datasets: [{
+        data: rows.map(r => r[key]),
+        backgroundColor: css('--series-1'),
+        hoverBackgroundColor: css('--series-1'),
+        borderRadius: 4, borderSkipped: 'start', maxBarThickness: 18, barPercentage: 0.9, categoryPercentage: 0.9,
+      }],
+    },
+    options: {
+      indexAxis: 'y', maintainAspectRatio: false, animation: false,
+      layout: { padding: { right: 56 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipStyle(), displayColors: false,
+          callbacks: {
+            title: items => items[0].label,
+            label: item => {
+              const r = rows[item.dataIndex];
+              return [`${m.label}: ${m.fmt(r[key])}`, `workers ${r.workers} · status ${r.status}`];
+            },
+          },
+        },
+      },
+      scales: {
+        ...baseScales('x', v => compact(v)),
+        y: { grid: { display: false }, border: { color: css('--axis') }, ticks: { color: css('--text-secondary'), font: { size: 12 }, autoSkip: false } },
+      },
+    },
+    plugins: [{
+      // Value at the bar tip, in text ink — a selective label; the axis carries the rest.
+      id: 'tips',
+      afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        ctx.save();
+        ctx.fillStyle = css('--text-secondary');
+        ctx.font = '11px system-ui, -apple-system, "Segoe UI", sans-serif';
+        ctx.textBaseline = 'middle';
+        chart.getDatasetMeta(0).data.forEach((bar, i) => ctx.fillText(m.fmt(rows[i][key]), bar.x + 6, bar.y));
+        ctx.restore();
+      },
+    }],
+  });
+}
+
+function renderBars() {
+  renderBar('barA', 'wrapA', 'barTitleA', state.metricA);
+  renderBar('barB', 'wrapB', 'barTitleB', state.metricB);
+}
+
+// ------------------------------------------------------------------ time series
+// Color follows the runtime and line style the framework, both fixed over the
+// whole run, so filtering never repaints a server.
+function slotOf(runtime) { return SLOTS[runtimes.indexOf(runtime) % SLOTS.length]; }
+function styleOf(r) {
+  const siblings = [...new Set(results.filter(x => x.runtime === r.runtime).map(x => x.server))].sort();
+  return { slot: slotOf(r.runtime), dash: DASHES[siblings.indexOf(r.server) % DASHES.length] };
+}
+function keySvg(r) {
+  const { slot, dash } = styleOf(r);
+  return `<svg class="key" width="22" height="8" aria-hidden="true"><line x1="2" y1="4" x2="20" y2="4" ` +
+    `stroke="var(${slot})" stroke-width="2" stroke-linecap="round" stroke-dasharray="${dash.join(' ')}"/></svg>`;
+}
+
+function renderPicker() {
+  const rows = measured().sort((a, b) => b.rps - a.rps);
+  if (!state.picked) state.picked = new Set(rows.map(r => r.server));
+  const el = document.getElementById('picker');
+  el.innerHTML = '';
+  const all = chip('All', false), none = chip('None', false);
+  all.addEventListener('click', () => { state.picked = new Set(rows.map(r => r.server)); renderPicker(); renderSeries(); });
+  none.addEventListener('click', () => { state.picked = new Set(); renderPicker(); renderSeries(); });
+  el.append(all, none);
+  for (const r of rows) {
+    const on = state.picked.has(r.server);
+    const b = chip('', on);
+    b.innerHTML = keySvg(r) + esc(r.server);
+    b.addEventListener('click', () => {
+      on ? state.picked.delete(r.server) : state.picked.add(r.server);
+      renderPicker(); renderSeries();
+    });
+    el.appendChild(b);
+  }
+}
+
+function pickedRows() {
+  return measured().filter(r => state.picked.has(r.server)).sort((a, b) => b.rps - a.rps);
+}
+
+function renderSeries() {
+  const rows = pickedRows();
+  const rts = [...new Set(rows.map(r => r.runtime))].sort();
+  document.getElementById('tsLegend').innerHTML = rts.map(rt =>
+    `<span style="--c:var(${slotOf(rt)})">${esc(rt)}</span>`).join('') +
+    (rows.length ? '<em>Color is the runtime, line style the framework.</em>' : '<em>No servers selected</em>') +
+    (rows.some(r => r.status === 'stalled') && DURATION_S
+      ? `<em>Cut at the ${DURATION_S} s test length; stalled servers kept hanging after it.</em>` : '');
+  line('tsRps', rows, r => r.series.load || [], p => p.rps, v => compact(Math.round(v)), v => fmtInt(v) + ' rps');
+  line('tsLat', rows, r => r.series.load || [], p => p.avg, v => fmtMs(v), v => fmtMs(v) + ' ms');
+  line('tsCpu', rows, r => r.series.res || [], p => p.cpu, v => (+v).toFixed(1), v => v.toFixed(2) + ' cores');
+  line('tsMem', rows, r => r.series.res || [], p => p.mem, v => compact(Math.round(v)), v => fmtInt(v) + ' MB');
+}
+
+function line(id, rows, pts, y, fmtTick, fmtTip) {
+  destroy(id);
+  charts[id] = new Chart(document.getElementById(id), {
+    type: 'line',
+    data: {
+      datasets: rows.map(r => {
+        const { slot, dash } = styleOf(r);
+        const c = css(slot);
+        return {
+          label: r.server, $c: c,
+          data: pts(r).map(p => ({ x: p.t, y: y(p) })),
+          borderColor: c, backgroundColor: c, borderDash: dash,
+          borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHitRadius: 6,
+          pointHoverBorderColor: css('--surface-1'), tension: 0.25, borderJoinStyle: 'round', borderCapStyle: 'round',
+        };
+      }),
+    },
+    options: {
+      maintainAspectRatio: false, animation: false, parsing: false,
+      // One line at a time: with every server drawn, an all-series tooltip would be unreadable.
+      interaction: { mode: 'nearest', axis: 'xy', intersect: false },
+      onHover: (e, els, chart) => highlight(chart, els.length ? els[0].datasetIndex : null),
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipStyle(),
+          callbacks: {
+            title: items => items.length ? `t = ${items[0].parsed.x.toFixed(1)} s` : '',
+            label: item => `${item.dataset.label}: ${fmtTip(item.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          type: 'linear', min: 0, max: DURATION_S || undefined, grid: { display: false }, border: { color: css('--axis') },
+          ticks: { color: css('--text-muted'), font: { size: 11 }, callback: v => v + 's', maxTicksLimit: 8 },
+        },
+        ...baseScales('y', fmtTick),
+      },
+    },
+    plugins: [crosshair, { id: 'unhighlight', afterEvent(chart, args) { if (args.event.type === 'mouseout') highlight(chart, null); } }],
+  });
+}
+
+// Bring the hovered line forward and fade the rest.
+function highlight(chart, idx) {
+  if (chart.$hi === idx) return;
+  chart.$hi = idx;
+  chart.data.datasets.forEach((d, i) => {
+    const focus = idx == null || i === idx;
+    d.borderColor = focus ? d.$c : d.$c + '30';
+    d.borderWidth = idx != null && i === idx ? 3 : 2;
+    d.order = i === idx ? -1 : 0;
+  });
+  chart.update('none');
+}
+
+const crosshair = {
+  id: 'crosshair',
+  afterDraw(chart) {
+    const active = chart.tooltip && chart.tooltip.getActiveElements();
+    if (!active || !active.length) return;
+    const x = active[0].element.x;
+    const { top, bottom } = chart.chartArea;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = css('--axis'); ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(x, top); ctx.lineTo(x, bottom); ctx.stroke();
+    ctx.restore();
+  },
+};
+
+// ------------------------------------------------------------------ table
+const COLS = [
+  ['server', 'Server', 'l'], ['status', 'Status', 'l'], ['workers', 'Workers'],
+  ['rps', 'RPS'], ['perCore', 'RPS/core'], ['p50', 'p50 ms'], ['p95', 'p95 ms'], ['p99', 'p99 ms'],
+  ['min', 'min ms'], ['max', 'max ms'], ['errors', 'Errors'], ['requests', 'Requests'],
+  ['cpu', 'CPU avg'], ['peakCpu', 'CPU peak'], ['idleMem', 'Idle MB'], ['mem', 'Peak MB'],
+  ['commit', 'Commit MB'], ['memory_mb', 'Cap MB'], ['startup_ms', 'Startup ms'], ['notes', 'Notes', 'l'],
+];
+const STATUS = {
+  ok: ['--good', 'OK'], oom: ['--critical', 'Out of memory'], crashed: ['--critical', 'Crashed'], failed: ['--serious', 'Failed'],
+  stalled: ['--serious', 'Stalled'],
+};
+
+function cell(r, key) {
+  const v = r[key];
+  if (key === 'server') return esc(v);
+  if (key === 'status') {
+    const [c, label] = STATUS[v] || ['--text-muted', v];
+    return `<span class="status" style="--c:var(${c})" title="${esc(r.error || '')}"><i></i>${label}</span>`;
+  }
+  if (key === 'notes') return `<span class="note">${esc([r.notes, r.error].filter(Boolean).join(' — '))}</span>`;
+  if (v == null) return '–';
+  if (['p50', 'p95', 'p99', 'min', 'max'].includes(key)) return fmtMs(v);
+  if (key === 'cpu' || key === 'peakCpu') return v.toFixed(2);
+  return fmtInt(v);
+}
+
+function renderTable() {
+  const rows = visible().slice();
+  const { key, dir } = state.sort;
+  rows.sort((a, b) => {
+    const x = a[key], y = b[key];
+    if (x == null && y == null) return 0;
+    if (x == null) return 1;
+    if (y == null) return -1;
+    const c = typeof x === 'string' ? x.localeCompare(y) : x - y;
+    return dir === 'ascending' ? c : -c;
+  });
+  const t = document.getElementById('table');
+  t.innerHTML = '<thead><tr>' + COLS.map(([k, label, cls]) =>
+    `<th data-k="${k}" class="${cls || ''}" ${k === key ? `aria-sort="${dir}"` : ''}>${label}</th>`).join('') + '</tr></thead>' +
+    '<tbody>' + (rows.length ? rows.map(r => '<tr>' + COLS.map(([k, , cls]) =>
+      `<td class="${cls || ''}">${cell(r, k)}</td>`).join('') + '</tr>').join('')
+      : `<tr><td colspan="${COLS.length}" class="empty">No results for this filter</td></tr>`) + '</tbody>';
+  t.querySelectorAll('th').forEach(th => th.addEventListener('click', () => {
+    const k = th.dataset.k;
+    const lowFirst = METRICS[k] ? METRICS[k].better === 'low' : true;
+    state.sort = state.sort.key === k
+      ? { key: k, dir: state.sort.dir === 'ascending' ? 'descending' : 'ascending' }
+      : { key: k, dir: lowFirst ? 'ascending' : 'descending' };
+    renderTable();
+  }));
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function renderCharts() {
+  if (typeof Chart === 'undefined') return;
+  Chart.defaults.font.family = 'system-ui, -apple-system, "Segoe UI", sans-serif';
+  Chart.defaults.color = css('--text-secondary');
+  renderBars(); renderSeries();
+}
+
+function render() {
+  renderTiles(); renderPicker(); renderTable(); renderCharts();
+}
+
+if (typeof Chart === 'undefined') {
+  for (const id of ['wrapA', 'wrapB']) document.getElementById(id).innerHTML =
+    '<div class="empty">Charts need the Chart.js CDN (offline?). The table below has every number.</div>';
+}
+render();
+</script>
+</body>
+</html>
