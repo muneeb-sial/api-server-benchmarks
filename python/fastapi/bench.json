@@ -1,0 +1,10 @@
+{
+  "build": [
+    "python -m venv .venv",
+    ".venv\\Scripts\\python.exe -m pip install -q --upgrade pip",
+    ".venv\\Scripts\\python.exe -m pip install -q -r requirements.txt"
+  ],
+  "start": [".venv/Scripts/python.exe", "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", "${PORT}",
+            "--workers", "${WORKERS}", "--http", "httptools", "--no-access-log", "--log-level", "warning"],
+  "notes": "uvicorn --workers (uvloop is not available on Windows)"
+}
