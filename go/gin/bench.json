@@ -1,0 +1,5 @@
+{
+  "build": ["go build -trimpath -ldflags=\"-s -w\" -o server.exe ."],
+  "start": ["server.exe"],
+  "env": { "GOMAXPROCS": "${WORKERS}", "GOMEMLIMIT": "${HEAP_MB}MiB" }
+}
