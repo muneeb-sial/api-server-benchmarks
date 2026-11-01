@@ -1,9 +1,11 @@
-# API Benchmarks
+# 🚀 API Benchmarks
 
-Hello-world HTTP servers in Rust, Go, Node, Deno, Bun, Python and Java, load-tested with
+Hello-world HTTP servers in 🦀 Rust, 🐹 Go, 🟢 Node, 🦕 Deno, 🥟 Bun, 🐍 Python and ☕ Java, load-tested with
 [k6](https://k6.io). Each one runs as a release/production build, inside a hard memory cap,
-with no Docker. Every run produces an HTML report: RPS, p50/p95/p99/min/max latency, errors,
+with no Docker 🐳🚫. Every run produces an HTML report 📊: RPS, p50/p95/p99/min/max latency, errors,
 CPU and memory, as totals and over time.
+
+## 🎯 Scenarios
 
 There are two scenarios:
 
@@ -12,9 +14,9 @@ There are two scenarios:
 | `text` | `GET /text` | `hello world` (`text/plain`) |
 | `json` | `GET /json` | `{"message":"hello world"}` (`application/json`) |
 
-k6 checks the status, body and content type of every response. A wrong answer counts as an error.
+k6 checks the status, body and content type of every response. A wrong answer counts as an error ❌.
 
-## Servers
+## 🖥️ Servers
 
 ```
 rust/    axum, actix
@@ -29,7 +31,7 @@ runner/  the Go orchestrator (bench.exe) and the k6 script
 
 `nestjs-node` uses `@nestjs/platform-node`, the native `node:http` adapter added in Nest 12.3.
 
-### Release builds and multi-core
+### ⚙️ Release builds and multi-core
 
 Every server reads `PORT` and `WORKERS` from its environment.
 
@@ -48,7 +50,7 @@ Bun and Deno have no `node:cluster` / `SO_REUSEPORT` on Windows, so they run one
 actually used. Its **RPS per CPU core** column compares efficiency fairly across
 single-process and multi-process servers.
 
-## Prerequisites
+## 📋 Prerequisites
 
 k6, Go 1.24+, Rust, Node 22+, Bun, Deno 2, Python 3.10+ and Java 17+ must all be on `PATH`.
 Maven isn't needed (the Maven wrapper is committed). The MSVC Rust toolchain also needs the
@@ -60,7 +62,7 @@ go build -C runner -o ..\bench.exe .   # build the orchestrator
 .\bench.exe doctor                      # check every toolchain is installed
 ```
 
-## Usage
+## ▶️ Usage
 
 ```powershell
 .\bench.exe list                         # servers + effective memory / workers / CPUs
@@ -72,7 +74,7 @@ go build -C runner -o ..\bench.exe .   # build the orchestrator
 
 `-filter` takes comma-separated globs: `node` (the whole runtime), `node/nest*`, `rust/axum,go/*`.
 
-Each run writes `results/<timestamp>/`:
+Each run writes 📁 `results/<timestamp>/`:
 
 ```
 summary.json                    every result, merged (the report reads this)
@@ -86,7 +88,7 @@ report.html                     the report: open it in a browser
 
 `summary.json` is rewritten after every result, so a run you stop with Ctrl+C still gets a report.
 
-## Configuration: `bench.config.yaml`
+## 🔧 Configuration: `bench.config.yaml`
 
 ```yaml
 defaults:
@@ -107,7 +109,7 @@ servers:
 You can also switch `k6.executor` to `constant-arrival-rate` with a `rate` to measure latency at a
 fixed load instead of at maximum throughput.
 
-### How the memory cap works (no Docker)
+### 🧠 How the memory cap works (no Docker)
 
 The runner starts each server **suspended** and assigns it to a Windows **Job Object** with a
 `JobMemoryLimit` before it runs a single instruction. It resumes the server only after that. Every
@@ -127,7 +129,7 @@ Runtimes don't see the job limit when they size their heaps, so the runner also 
 You can use these in any `bench.json` as `${NAME}`, and they're also exported to the server's
 environment. A server that reaches the cap gets status **Out of memory** in the report.
 
-## Adding a server
+## ➕ Adding a server
 
 Create `<runtime>/<framework>/` and put the server and a `bench.json` in it:
 
@@ -147,14 +149,14 @@ Create `<runtime>/<framework>/` and put the server and a `bench.json` in it:
 
 `bench list` picks the new server up automatically.
 
-## Caveats
+## ⚠️ Caveats
 
-- k6 and the server share one machine. CPU pinning (`server_cpus` / `k6.cpus`) keeps them on
+- 🖇️ k6 and the server share one machine. CPU pinning (`server_cpus` / `k6.cpus`) keeps them on
   separate cores, but they still share memory bandwidth and the loopback stack.
-- On Windows, k6 timers resolve to about 0.5 ms. For the fastest servers p50 may read 0, so
+- ⏱️ On Windows, k6 timers resolve to about 0.5 ms. For the fastest servers p50 may read 0, so
   compare those servers on RPS, p99 and max.
-- A result marked **Stalled** means the server stopped answering for 2 or more seconds while k6
+- 🧊 A result marked **Stalled** means the server stopped answering for 2 or more seconds while k6
   was still sending requests. k6 counts those hung requests as interrupted rather than failed,
   so the runner checks the per-second RPS itself. `deno serve --parallel` did this once in 5 runs
   during testing; re-run the server to confirm.
-- Only Windows is implemented. A Linux backend would use cgroup v2 in `runner/internal/proc`.
+- 🪟 Only Windows is implemented. A Linux backend would use cgroup v2 in `runner/internal/proc`.
