@@ -1,0 +1,5 @@
+{
+  "build": ["npm install --no-audit --no-fund", "npm run build"],
+  "start": ["node", "node_modules/pm2/bin/pm2-runtime", "start", "ecosystem.config.cjs"],
+  "env": { "NODE_ENV": "production", "PM2_HOME": ".pm2" }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "node-hono-bench",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "hono": "^4.13.16",
+    "pm2": "^7.1.1"
+  }
+}

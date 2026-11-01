@@ -1,0 +1,9 @@
+{
+  "name": "node-fastify-bench",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fastify": "^5.12.7",
+    "pm2": "^7.1.1"
+  }
+}
