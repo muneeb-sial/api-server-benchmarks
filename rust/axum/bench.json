@@ -1,0 +1,4 @@
+{
+  "build": ["cargo build --release"],
+  "start": ["target/release/axum-bench.exe"]
+}

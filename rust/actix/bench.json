@@ -1,0 +1,4 @@
+{
+  "build": ["cargo build --release"],
+  "start": ["target/release/actix-bench.exe"]
+}
