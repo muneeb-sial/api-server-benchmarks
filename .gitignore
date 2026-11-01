@@ -1,0 +1,11 @@
+results/
+bench.exe
+
+# build outputs
+target/
+dist/
+node_modules/
+.venv/
+__pycache__/
+.pm2/
+*.exe

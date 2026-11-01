@@ -1,0 +1,34 @@
+# Benchmark configuration. Every server folder <runtime>/<framework>/bench.json
+# is picked up automatically; this file only sets limits and load.
+
+port: 3000              # every server listens here (one at a time)
+cooldown: 5s            # pause between runs
+startup_timeout: 60s    # max time for a server to answer GET /text
+sample_interval: 250ms  # CPU / memory sampling period
+
+scenarios: [text, json]
+
+# Applied to every server unless overridden below.
+defaults:
+  memory_mb: 4096       # hard cap for the whole process tree (Windows Job Object)
+  workers: 6            # exposed to servers as WORKERS (threads / processes)
+  server_cpus: "0-5"    # CPU affinity for the server; empty = all CPUs
+
+k6:
+  executor: constant-vus   # or constant-arrival-rate (then set rate)
+  vus: 100
+  # rate: 20000            # requests/s, only for constant-arrival-rate
+  duration: 30s
+  warmup: 10s
+  cpus: "6-11"             # keep the load generator off the server's cores
+  web_dashboard: false     # true = also save k6's own HTML dashboard per run
+  api_address: 127.0.0.1:6565
+
+# Per-server overrides, keyed by <runtime>/<framework>.
+servers:
+  java/springboot:
+    memory_mb: 2048
+  # python/flask:
+  #   workers: 12
+  # deno/nestjs-express:
+  #   disabled: true
