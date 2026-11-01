@@ -1,0 +1,8 @@
+{
+  "name": "bun-express-bench",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "name": "bun-hono-bench",
+  "private": true,
+  "type": "module",
+  "dependencies": { "hono": "^4.13.16" },
+  "devDependencies": { "@types/bun": "^1.3.0" }
+}

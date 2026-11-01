@@ -1,0 +1,8 @@
+{
+  "name": "bun-fastify-bench",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "fastify": "^5.12.7"
+  }
+}

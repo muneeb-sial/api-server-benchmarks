@@ -1,0 +1,7 @@
+{
+  "build": ["bun install", "bun run build"],
+  "start": ["bun", "dist/main.js"],
+  "env": { "NODE_ENV": "production", "BUN_JSC_forceRAMSize": "${HEAP_BYTES}" },
+  "maxWorkers": 1,
+  "notes": "single process: Bun has no cluster/reusePort support on Windows"
+}
