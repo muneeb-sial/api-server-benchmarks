@@ -1,0 +1,6 @@
+{
+  "build": [".\\mvnw.cmd -q -DskipTests package"],
+  "start": ["java", "-XX:MaxRAM=${MEMORY_MB}m", "-XX:MaxRAMPercentage=75", "-XX:ActiveProcessorCount=${WORKERS}",
+            "-jar", "target/app.jar"],
+  "notes": "Spring Boot WebMVC on Tomcat; WORKERS sets the JVM's visible core count"
+}
