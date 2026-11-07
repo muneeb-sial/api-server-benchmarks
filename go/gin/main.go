@@ -13,6 +13,10 @@ func main() {
 	if port == "" {
 		port = "3000"
 	}
+	host := os.Getenv("HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.New() // no logger / recovery middleware
 
@@ -24,5 +28,5 @@ func main() {
 	})
 
 	log.Printf("gin listening on :%s", port)
-	log.Fatal(r.Run("127.0.0.1:" + port))
+	log.Fatal(r.Run(host + ":" + port))
 }

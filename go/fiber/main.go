@@ -12,6 +12,10 @@ func main() {
 	if port == "" {
 		port = "3000"
 	}
+	host := os.Getenv("HOST")
+	if host == "" {
+		host = "127.0.0.1"
+	}
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 
 	app.Get("/text", func(c *fiber.Ctx) error {
@@ -22,5 +26,5 @@ func main() {
 	})
 
 	log.Printf("fiber listening on :%s", port)
-	log.Fatal(app.Listen("127.0.0.1:" + port))
+	log.Fatal(app.Listen(host + ":" + port))
 }
