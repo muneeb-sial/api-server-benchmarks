@@ -144,6 +144,16 @@ func doctor() {
 		first, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
 		fmt.Printf("  %-7s %s\n", t[0], strings.TrimSpace(first))
 	}
+	// The C and C++ servers use the MSVC toolchain, found through vswhere rather than PATH.
+	vswhere := filepath.Join(os.Getenv("ProgramFiles(x86)"), "Microsoft Visual Studio", "Installer", "vswhere.exe")
+	out, _ := exec.Command(vswhere, "-latest", "-products", "*",
+		"-requires", "Microsoft.VisualStudio.Component.VC.Tools.x86.x64", "-property", "displayName").Output()
+	if name := strings.TrimSpace(string(out)); name != "" {
+		fmt.Printf("  %-7s %s\n", "msvc", name)
+	} else {
+		fmt.Printf("  %-7s MISSING (no Visual Studio with the C++ build tools)\n", "msvc")
+		missing++
+	}
 	if missing > 0 {
 		fmt.Printf("\n%d tool(s) missing; servers for those runtimes will fail to build.\n", missing)
 	}
