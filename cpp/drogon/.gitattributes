@@ -1,0 +1,2 @@
+# Applied with git apply inside the Docker build, which needs LF line endings.
+*.patch text eol=lf
