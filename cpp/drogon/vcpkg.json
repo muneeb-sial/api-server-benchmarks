@@ -1,0 +1,4 @@
+{
+  "name": "drogon-bench",
+  "dependencies": ["drogon"]
+}

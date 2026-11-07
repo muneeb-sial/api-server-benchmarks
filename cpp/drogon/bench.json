@@ -1,0 +1,5 @@
+{
+  "build": [".\\build.cmd"],
+  "start": ["build/drogon-bench.exe"],
+  "notes": "Drogon (trantor event loops), WORKERS IO threads; MSVC /O2 + LTCG, static"
+}

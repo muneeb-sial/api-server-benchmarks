@@ -1,6 +1,6 @@
 # 🚀 API Benchmarks
 
-Hello-world HTTP servers in 🦀 Rust, 🐹 Go, 🟢 Node, 🦕 Deno, 🥟 Bun, 🐍 Python and ☕ Java, load-tested with
+Hello-world HTTP servers in 🦀 Rust, 🐹 Go, ➕ C++, 🟢 Node, 🦕 Deno, 🥟 Bun, 🐍 Python and ☕ Java, load-tested with
 [k6](https://k6.io). Each one runs as a release/production build, inside a hard memory cap,
 with no Docker 🐳🚫. Every run produces an HTML report 📊: RPS, p50/p95/p99/min/max latency, errors,
 CPU and memory, as totals and over time.
@@ -20,6 +20,7 @@ k6 checks the status, body and content type of every response. A wrong answer co
 
 ```
 rust/    axum, actix
+cpp/     drogon
 go/      fiber, gin
 node/    hono, express, fastify, nestjs-node, nestjs-express, nestjs-fastify
 bun/     hono, express, fastify, nestjs-node, nestjs-express, nestjs-fastify
@@ -38,6 +39,7 @@ Every server reads `PORT` and `WORKERS` from its environment.
 | Runtime | Build | Uses cores via |
 |---|---|---|
 | Rust | `cargo build --release` (fat LTO, 1 codegen unit, `panic=abort`) | tokio / actix worker threads = `WORKERS` |
+| C++ | `build.cmd`: CMake + Ninja, MSVC `/O2` + LTCG, vcpkg deps linked statically | Drogon IO threads = `WORKERS` |
 | Go | `go build -trimpath -ldflags="-s -w"` | `GOMAXPROCS=WORKERS` |
 | Node | `npm install` (+ `tsc` for Nest), `NODE_ENV=production` | **pm2 cluster**: `WORKERS` processes via `pm2-runtime` |
 | Bun | `bun build --minify` (Nest: `tsc`) | single process |
@@ -52,8 +54,13 @@ single-process and multi-process servers.
 
 ## 📋 Prerequisites
 
-k6, Go 1.24+, Rust, Node 22+, Bun, Deno 2, Python 3.10+ and Java 17+ must all be on `PATH`.
-Maven isn't needed (the Maven wrapper is committed). The MSVC Rust toolchain also needs the
+k6, Go 1.24+, Rust, Node 22+, Bun, Deno 2, Python 3.10+ and Java 17+ must all be on `PATH`, and
+the C++ server needs Visual Studio 2022 with the C++ build tools.
+Maven isn't needed (the Maven wrapper is committed). For C++, `build.cmd` finds Visual Studio
+with `vswhere` and uses its bundled CMake and Ninja, so nothing extra goes on `PATH`. It clones a
+pinned vcpkg into `.vcpkg/` on first use (Visual Studio's own vcpkg is too old for current ports).
+The first build takes a while because vcpkg compiles Drogon's dependencies (OpenSSL, c-ares,
+brotli, …) from source; later builds reuse vcpkg's binary cache. The MSVC Rust toolchain also needs the
 Visual Studio C++ build tools **and the Windows SDK** (Visual Studio Installer → Individual
 components → Windows 11 SDK); without the SDK, cargo fails with "linker `link.exe` not found".
 
