@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/muneeb-sial/api-benchmarks/runner/internal/config"
+	"github.com/muneeb-sial/api-benchmarks/runner/internal/docker"
 	"github.com/muneeb-sial/api-benchmarks/runner/internal/k6"
 	"github.com/muneeb-sial/api-benchmarks/runner/internal/proc"
 )
@@ -91,6 +92,8 @@ type Meta struct {
 	CPUs     int             `json:"cpus"`
 	K6       config.K6       `json:"k6"`
 	Defaults config.Settings `json:"defaults"`
+	// Docker is the engine version when the servers ran in containers.
+	Docker string `json:"docker,omitempty"`
 }
 
 type Run struct {
@@ -118,6 +121,25 @@ func Build(ms []*config.Manifest, out io.Writer) []string {
 	return failed
 }
 
+// BuildImages builds the Docker image of every manifest that has a Dockerfile;
+// like Build it keeps going after a failure and returns the names that failed.
+func BuildImages(ms []*config.Manifest, out io.Writer) []string {
+	var failed []string
+	for _, m := range ms {
+		fmt.Fprintf(out, "\n==> docker build %s\n", m.Name)
+		if m.Dockerfile() == "" {
+			fmt.Fprintf(out, "  !! %s: no Dockerfile\n", m.Name)
+			failed = append(failed, m.Name)
+			continue
+		}
+		if err := docker.Build(m.Name, m.Dir, out); err != nil {
+			fmt.Fprintf(out, "  !! %s: %v\n", m.Name, err)
+			failed = append(failed, m.Name)
+		}
+	}
+	return failed
+}
+
 func shell(step, dir string, out io.Writer) error {
 	var cmd *exec.Cmd
 	if runtime.GOOS == "windows" {
@@ -140,6 +162,18 @@ type Runner struct {
 	Root   string
 	OutDir string
 	Log    io.Writer
+	// Docker runs every server from its Dockerfile in a container; k6 stays on the host.
+	Docker bool
+}
+
+// server is a running server under test: a native process tree in a Job Object
+// (*proc.Job) or a container (*docker.Container).
+type server interface {
+	Exited() <-chan struct{}
+	MemoryLimitHit() bool
+	AbnormalExit() bool
+	Stats() (proc.Stats, error)
+	Close()
 }
 
 // RunAll benchmarks every manifest × scenario sequentially and writes
@@ -150,6 +184,13 @@ func (r *Runner) RunAll(ctx context.Context, ms []*config.Manifest, scenarios []
 		Started: time.Now(), Host: host, OS: runtime.GOOS + "/" + runtime.GOARCH,
 		CPUs: runtime.NumCPU(), K6: r.Cfg.K6, Defaults: r.Cfg.Defaults,
 	}}
+	if r.Docker {
+		v, err := docker.Check()
+		if err != nil {
+			return run, err
+		}
+		run.Meta.Docker = v
+	}
 	cooldown, _ := time.ParseDuration(r.Cfg.Cooldown)
 	total := len(ms) * len(scenarios)
 	i := 0
@@ -159,13 +200,17 @@ func (r *Runner) RunAll(ctx context.Context, ms []*config.Manifest, scenarios []
 			fmt.Fprintf(r.Log, "skip %s (disabled in config)\n", m.Name)
 			continue
 		}
+		var imageErr error
+		if r.Docker && ctx.Err() == nil {
+			imageErr = r.buildImage(m)
+		}
 		for _, sc := range scenarios {
 			if ctx.Err() != nil {
 				return run, ctx.Err()
 			}
 			i++
 			fmt.Fprintf(r.Log, "\n[%d/%d] %s · %s\n", i, total, m.Name, sc)
-			res := r.runOne(ctx, m, set, sc)
+			res := r.runOne(ctx, m, set, sc, imageErr)
 			printResult(r.Log, res)
 			run.Results = append(run.Results, res)
 			if err := WriteRun(r.OutDir, run); err != nil {
@@ -180,7 +225,36 @@ func (r *Runner) RunAll(ctx context.Context, ms []*config.Manifest, scenarios []
 	return run, nil
 }
 
-func (r *Runner) runOne(ctx context.Context, m *config.Manifest, set config.Settings, scenario string) *Result {
+// buildImage builds (or, from cache, refreshes) the server's image once before
+// its scenarios run, logging to <out>/<runtime>_<framework>/docker-build.log.
+func (r *Runner) buildImage(m *config.Manifest) error {
+	if m.Dockerfile() == "" {
+		return fmt.Errorf("no Dockerfile in %s", m.Dir)
+	}
+	runtimeName, framework, _ := strings.Cut(m.Name, "/")
+	dir := filepath.Join(r.OutDir, runtimeName+"_"+framework)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	logPath := filepath.Join(dir, "docker-build.log")
+	logf, err := os.Create(logPath)
+	if err != nil {
+		return err
+	}
+	defer logf.Close()
+	fmt.Fprintf(r.Log, "\ndocker build %s\n", docker.Image(m.Name))
+	t0 := time.Now()
+	if err := docker.Build(m.Name, m.Dir, logf); err != nil {
+		return fmt.Errorf("docker build: %w (see %s)", err, logPath)
+	}
+	fmt.Fprintf(r.Log, "  built in %.1f s\n", time.Since(t0).Seconds())
+	return nil
+}
+
+func (r *Runner) runOne(ctx context.Context, m *config.Manifest, set config.Settings, scenario string, imageErr error) *Result {
+	if r.Docker {
+		m = m.InDocker()
+	}
 	runtimeName, framework, _ := strings.Cut(m.Name, "/")
 	workers := m.EffectiveWorkers(set.Workers)
 	res := &Result{
@@ -198,11 +272,20 @@ func (r *Runner) runOne(ctx context.Context, m *config.Manifest, set config.Sett
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fail(StatusFailed, err)
 	}
+	if imageErr != nil {
+		return fail(StatusFailed, imageErr)
+	}
 	if portInUse(r.Cfg.Port) {
 		return fail(StatusFailed, fmt.Errorf("port %d is already in use", r.Cfg.Port))
 	}
 
-	vars := config.Vars(r.Cfg.Port, workers, set.MemoryMB)
+	// Inside a container the server must listen on every interface for the
+	// published port to reach it.
+	host := "127.0.0.1"
+	if r.Docker {
+		host = "0.0.0.0"
+	}
+	vars := config.Vars(host, r.Cfg.Port, workers, set.MemoryMB)
 	argv := make([]string, len(m.Start))
 	for i, a := range m.Start {
 		argv[i] = config.Expand(a, vars)
@@ -224,12 +307,25 @@ func (r *Runner) runOne(ctx context.Context, m *config.Manifest, set config.Sett
 	defer logf.Close()
 
 	t0 := time.Now()
-	job, err := proc.Start(proc.Options{
-		Argv: argv, Dir: m.Dir, Env: env, Stdout: logf, Stderr: logf,
-		MemoryBytes: uint64(set.MemoryMB) << 20, Affinity: serverAff,
-	})
-	if err != nil {
-		return fail(StatusFailed, fmt.Errorf("start %q: %w (did you run build?)", strings.Join(argv, " "), err))
+	var job server
+	if r.Docker {
+		c, err := docker.Start(docker.Options{
+			Server: m.Name, Env: env, Port: r.Cfg.Port, MemoryMB: set.MemoryMB, CPUs: set.ServerCPUs,
+			Stdout: logf, Stderr: logf,
+		})
+		if err != nil {
+			return fail(StatusFailed, fmt.Errorf("docker run %s: %w", docker.Image(m.Name), err))
+		}
+		job = c
+	} else {
+		j, err := proc.Start(proc.Options{
+			Argv: argv, Dir: m.Dir, Env: env, Stdout: logf, Stderr: logf,
+			MemoryBytes: uint64(set.MemoryMB) << 20, Affinity: serverAff,
+		})
+		if err != nil {
+			return fail(StatusFailed, fmt.Errorf("start %q: %w (did you run build?)", strings.Join(argv, " "), err))
+		}
+		job = j
 	}
 	defer job.Close()
 
@@ -307,7 +403,7 @@ func (r *Runner) runOne(ctx context.Context, m *config.Manifest, set config.Sett
 	return res
 }
 
-func (r *Runner) classify(job *proc.Job, otherwise string) string {
+func (r *Runner) classify(job server, otherwise string) string {
 	if job.MemoryLimitHit() {
 		return StatusOOM
 	}
@@ -322,7 +418,7 @@ func (r *Runner) classify(job *proc.Job, otherwise string) string {
 	return otherwise
 }
 
-func waitHealthy(ctx context.Context, url string, job *proc.Job, timeout time.Duration) error {
+func waitHealthy(ctx context.Context, url string, job server, timeout time.Duration) error {
 	client := &http.Client{Timeout: time.Second}
 	deadline := time.Now().Add(timeout)
 	for {
@@ -346,7 +442,7 @@ func waitHealthy(ctx context.Context, url string, job *proc.Job, timeout time.Du
 	}
 }
 
-func sample(job *proc.Job, interval time.Duration, stop <-chan struct{}) []ResPoint {
+func sample(job server, interval time.Duration, stop <-chan struct{}) []ResPoint {
 	var out []ResPoint
 	start := time.Now()
 	prevT := start

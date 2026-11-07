@@ -263,10 +263,14 @@ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderChar
   const load = k.executor === 'constant-arrival-rate' ? `${fmtInt(k.rate)} req/s target` : `${k.vus} VUs`;
   document.getElementById('meta').textContent =
     `${new Date(m.started).toLocaleString()} · ${m.host || ''} · ${m.os || ''} · ${m.cpus} logical CPUs · ` +
-    `k6 ${load}, ${k.duration} (+${k.warmup} warmup)` + (k.cpus ? ` on CPUs ${k.cpus}` : '');
+    `k6 ${load}, ${k.duration} (+${k.warmup} warmup)` + (k.cpus ? ` on CPUs ${k.cpus}` : '') +
+    (m.docker ? ` · servers in Docker ${m.docker}` : '');
   document.getElementById('footer').textContent =
     'Latency is measured by k6 on the same host. On Windows, k6 timers resolve to about 0.5 ms, so sub-millisecond percentiles are coarse. ' +
-    'Memory is the resident working set summed over every process in the server tree; the cap is enforced on committed memory with a Job Object.';
+    (m.docker
+      ? 'Servers ran in Linux containers reached through Docker\'s published port, which adds overhead native servers do not pay; compare Docker results with each other, not with native runs. ' +
+        'Memory is the container\'s cgroup charge minus reclaimable page cache; the cap is enforced by docker --memory.'
+      : 'Memory is the resident working set summed over every process in the server tree; the cap is enforced on committed memory with a Job Object.');
 
   const sc = document.getElementById('scenarios');
   for (const s of scenarios) {

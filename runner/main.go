@@ -2,8 +2,8 @@
 //
 //	bench doctor
 //	bench list   [-filter node/*]
-//	bench build  [-filter node/*]
-//	bench run    [-filter rust/*,go/gin] [-scenario text,json] [-duration 30s] [-vus 100]
+//	bench build  [-filter node/*] [-docker]
+//	bench run    [-filter rust/*,go/gin] [-scenario text,json] [-duration 30s] [-vus 100] [-docker] [-memory 4g]
 //	bench report results/<run>
 package main
 
@@ -20,6 +20,7 @@ import (
 
 	"github.com/muneeb-sial/api-benchmarks/runner/internal/bench"
 	"github.com/muneeb-sial/api-benchmarks/runner/internal/config"
+	"github.com/muneeb-sial/api-benchmarks/runner/internal/docker"
 	"github.com/muneeb-sial/api-benchmarks/runner/internal/report"
 )
 
@@ -37,6 +38,8 @@ func main() {
 	warmup := fs.String("warmup", "", "override k6 warmup")
 	vus := fs.Int("vus", 0, "override k6 VUs")
 	out := fs.String("out", "", "results directory (default <root>/results/<timestamp>)")
+	useDocker := fs.Bool("docker", false, "build and run each server from its Dockerfile in a container (no local toolchains needed)")
+	memory := fs.String("memory", "", "memory cap for every server, e.g. 4096, 512m or 4g (default: memory_mb from the config, 4g)")
 	_ = fs.Parse(args)
 
 	switch cmd {
@@ -64,12 +67,21 @@ func main() {
 	}
 	cfg, err := config.Load(*cfgPath)
 	check(err)
+	if *memory != "" {
+		mb, err := config.ParseMemoryMB(*memory)
+		check(err)
+		cfg.OverrideMemory(mb)
+	}
 	all, err := config.Discover(absRoot)
 	check(err)
 	ms, err := config.Filter(all, *filter)
 	check(err)
 	if len(ms) == 0 {
 		fail(fmt.Errorf("no servers match %q", *filter))
+	}
+	if *useDocker && cmd != "list" {
+		_, err := docker.Check()
+		check(err)
 	}
 
 	switch cmd {
@@ -78,13 +90,23 @@ func main() {
 			s := cfg.For(m.Name)
 			state := ""
 			if s.Disabled {
-				state = "  (disabled)"
+				state += "  (disabled)"
+			}
+			if m.Dockerfile() == "" {
+				state += "  (no Dockerfile)"
+			}
+			if *useDocker {
+				m = m.InDocker()
 			}
 			fmt.Printf("%-26s mem %5d MB  workers %2d  cpus %-6s%s\n",
 				m.Name, s.MemoryMB, m.EffectiveWorkers(s.Workers), orAll(s.ServerCPUs), state)
 		}
 	case "build":
-		if failed := bench.Build(ms, os.Stdout); len(failed) > 0 {
+		build := bench.Build
+		if *useDocker {
+			build = bench.BuildImages
+		}
+		if failed := build(ms, os.Stdout); len(failed) > 0 {
 			fail(fmt.Errorf("build failed for: %s", strings.Join(failed, ", ")))
 		}
 		fmt.Println("\nall builds ok")
@@ -115,7 +137,7 @@ func main() {
 
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
-		r := &bench.Runner{Cfg: cfg, Root: absRoot, OutDir: dir, Log: os.Stdout}
+		r := &bench.Runner{Cfg: cfg, Root: absRoot, OutDir: dir, Log: os.Stdout, Docker: *useDocker}
 		_, runErr := r.RunAll(ctx, ms, sc)
 		path, err := report.Generate(dir)
 		check(err)
@@ -154,8 +176,15 @@ func doctor() {
 		fmt.Printf("  %-7s MISSING (no Visual Studio with the C++ build tools)\n", "msvc")
 		missing++
 	}
+	// Docker is optional: it stands in for the runtime toolchains with -docker.
+	if v, err := docker.Check(); err == nil {
+		fmt.Printf("  %-7s %s (for -docker)\n", "docker", v)
+	} else {
+		fmt.Printf("  %-7s not available, optional (%v)\n", "docker", err)
+	}
 	if missing > 0 {
 		fmt.Printf("\n%d tool(s) missing; servers for those runtimes will fail to build.\n", missing)
+		fmt.Println("Without them, build and run the servers in Docker: bench run -docker")
 	}
 }
 
@@ -171,8 +200,9 @@ func usage() {
 
   doctor  check that k6 and every runtime toolchain is installed
   list    show discovered servers and their effective settings
-  build   build every (or -filter'd) server in release mode
+  build   build every (or -filter'd) server in release mode (-docker: build the images)
   run     benchmark servers, write results/<timestamp>/ and report.html
+          -docker runs each server in a container, -memory 4g sets the memory cap
   report  regenerate report.html for a results directory
 
 run "bench <command> -h" for flags`)

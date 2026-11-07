@@ -145,6 +145,32 @@ func (c *Config) For(name string) Settings {
 	return s
 }
 
+// OverrideMemory sets one memory cap for every server, replacing per-server overrides.
+func (c *Config) OverrideMemory(mb int) {
+	c.Defaults.MemoryMB = mb
+	for name, s := range c.Servers {
+		s.MemoryMB = 0
+		c.Servers[name] = s
+	}
+}
+
+// ParseMemoryMB reads a size in MB: "4096", "512m", "4g", "1.5gb".
+func ParseMemoryMB(s string) (int, error) {
+	t := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(s)), "b")
+	mult := 1.0
+	switch {
+	case strings.HasSuffix(t, "g"):
+		mult, t = 1024, strings.TrimSuffix(t, "g")
+	case strings.HasSuffix(t, "m"):
+		t = strings.TrimSuffix(t, "m")
+	}
+	n, err := strconv.ParseFloat(t, 64)
+	if err != nil || n*mult < 1 {
+		return 0, fmt.Errorf("bad memory size %q (want e.g. 4096, 512m or 4g)", s)
+	}
+	return int(n * mult), nil
+}
+
 // Manifest is a server's bench.json.
 type Manifest struct {
 	Name string `json:"-"`
@@ -161,6 +187,30 @@ type Manifest struct {
 	MaxWorkers int `json:"maxWorkers"`
 	// Notes are shown in the report next to the result.
 	Notes string `json:"notes"`
+	// Docker overrides fields for `bench run -docker`, where the server runs on Linux.
+	Docker *DockerOverrides `json:"docker"`
+}
+
+// DockerOverrides replace manifest fields in Docker mode; unset fields keep the native value.
+type DockerOverrides struct {
+	// MaxWorkers replaces the cap; 0 lifts it (e.g. cluster/SO_REUSEPORT exist on Linux).
+	MaxWorkers *int   `json:"maxWorkers"`
+	Notes      string `json:"notes"`
+}
+
+// InDocker returns the manifest with its Docker overrides applied.
+func (m *Manifest) InDocker() *Manifest {
+	if m.Docker == nil {
+		return m
+	}
+	d := *m
+	if m.Docker.MaxWorkers != nil {
+		d.MaxWorkers = *m.Docker.MaxWorkers
+	}
+	if m.Docker.Notes != "" {
+		d.Notes = m.Docker.Notes
+	}
+	return &d
 }
 
 // Discover finds every <runtime>/<framework>/bench.json under root.
@@ -226,25 +276,36 @@ func (m *Manifest) EffectiveWorkers(requested int) int {
 	return requested
 }
 
+// Dockerfile returns the path of the server's Dockerfile, or "" if it has none.
+func (m *Manifest) Dockerfile() string {
+	p := filepath.Join(m.Dir, "Dockerfile")
+	if st, err := os.Stat(p); err != nil || st.IsDir() {
+		return ""
+	}
+	return p
+}
+
 // Vars are the substitutions available in start/env:
 //
-//	PORT, WORKERS, MEMORY_MB, HEAP_MB (80% of the cap), HEAP_BYTES,
-//	WORKER_HEAP_MB (HEAP_MB / WORKERS)
+//	HOST (the address to listen on), PORT, WORKERS, MEMORY_MB, HEAP_MB (80% of the cap),
+//	HEAP_BYTES, WORKER_HEAP_MB (HEAP_MB / WORKERS), WORKER_HEAP_BYTES
 //
 // They are also exported to the server's environment.
-func Vars(port, workers, memoryMB int) map[string]string {
+func Vars(host string, port, workers, memoryMB int) map[string]string {
 	heap := memoryMB * 8 / 10
 	perWorker := heap
 	if workers > 1 {
 		perWorker = heap / workers
 	}
 	return map[string]string{
-		"PORT":           strconv.Itoa(port),
-		"WORKERS":        strconv.Itoa(workers),
-		"MEMORY_MB":      strconv.Itoa(memoryMB),
-		"HEAP_MB":        strconv.Itoa(heap),
-		"HEAP_BYTES":     strconv.FormatInt(int64(heap)<<20, 10),
-		"WORKER_HEAP_MB": strconv.Itoa(perWorker),
+		"HOST":              host,
+		"PORT":              strconv.Itoa(port),
+		"WORKERS":           strconv.Itoa(workers),
+		"MEMORY_MB":         strconv.Itoa(memoryMB),
+		"HEAP_MB":           strconv.Itoa(heap),
+		"HEAP_BYTES":        strconv.FormatInt(int64(heap)<<20, 10),
+		"WORKER_HEAP_MB":    strconv.Itoa(perWorker),
+		"WORKER_HEAP_BYTES": strconv.FormatInt(int64(perWorker)<<20, 10),
 	}
 }
 
