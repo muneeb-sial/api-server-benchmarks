@@ -19,6 +19,7 @@ async fn json() -> impl Responder {
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3000);
+    let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
     let workers = std::env::var("WORKERS")
         .ok()
         .and_then(|w| w.parse().ok())
@@ -27,7 +28,7 @@ async fn main() -> std::io::Result<()> {
     println!("actix-web listening on :{port} with {workers} workers");
     HttpServer::new(|| App::new().service(text).service(json))
         .workers(workers)
-        .bind(("127.0.0.1", port))?
+        .bind((host.as_str(), port))?
         .run()
         .await
 }

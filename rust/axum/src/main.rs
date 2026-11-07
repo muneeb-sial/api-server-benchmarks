@@ -16,6 +16,7 @@ async fn json() -> Json<Message> {
 
 fn main() {
     let port = std::env::var("PORT").unwrap_or_else(|_| "3000".into());
+    let host = std::env::var("HOST").unwrap_or_else(|_| "127.0.0.1".into());
     let workers = std::env::var("WORKERS")
         .ok()
         .and_then(|w| w.parse().ok())
@@ -28,7 +29,7 @@ fn main() {
         .unwrap()
         .block_on(async {
             let app = Router::new().route("/text", get(text)).route("/json", get(json));
-            let listener = tokio::net::TcpListener::bind(format!("127.0.0.1:{port}")).await.unwrap();
+            let listener = tokio::net::TcpListener::bind(format!("{host}:{port}")).await.unwrap();
             println!("axum listening on :{port} with {workers} worker threads");
             axum::serve(listener, app).await.unwrap();
         });
