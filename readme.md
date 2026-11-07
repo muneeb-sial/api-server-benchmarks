@@ -1,9 +1,9 @@
 # 🚀 API Benchmarks
 
 Hello-world HTTP servers in 🦀 Rust, 🐹 Go, ➕ C++, 🟢 Node, 🦕 Deno, 🥟 Bun, 🐍 Python and ☕ Java, load-tested with
-[k6](https://k6.io). Each one runs as a release/production build, inside a hard memory cap,
-with no Docker 🐳🚫. Every run produces an HTML report 📊: RPS, p50/p95/p99/min/max latency, errors,
-CPU and memory, as totals and over time.
+[k6](https://k6.io). Each one runs as a release/production build, inside a hard memory cap, natively
+on Windows, or in Docker 🐳 if you don't have every toolchain installed. Every run produces an HTML
+report 📊: RPS, p50/p95/p99/min/max latency, errors, CPU and memory, as totals and over time.
 
 ## 🎯 Scenarios
 
@@ -48,8 +48,9 @@ Every server reads `PORT` and `WORKERS` from its environment.
 | Java | `mvnw package` (Spring Boot 4, WebMVC/Tomcat) | JVM threads, `-XX:ActiveProcessorCount=WORKERS` |
 
 Bun and Deno have no `node:cluster` / `SO_REUSEPORT` on Windows, so they run one process
-(`maxWorkers: 1` in their `bench.json`). The report shows the worker count each result
-actually used. Its **RPS per CPU core** column compares efficiency fairly across
+(`maxWorkers: 1` in their `bench.json`). In [Docker mode](#-docker-mode) they run on Linux, where
+a small `cluster.js` wrapper forks `WORKERS` processes with `node:cluster`. The report shows the
+worker count each result actually used. Its **RPS per CPU core** column compares efficiency fairly across
 single-process and multi-process servers.
 
 ## 📋 Prerequisites
@@ -69,6 +70,9 @@ go build -C runner -o ..\bench.exe .   # build the orchestrator
 .\bench.exe doctor                      # check every toolchain is installed
 ```
 
+Missing some of those toolchains? Use [Docker mode](#-docker-mode) instead. Then you only need
+k6, Go (to build `bench.exe`) and Docker Desktop.
+
 ## ▶️ Usage
 
 ```powershell
@@ -76,10 +80,58 @@ go build -C runner -o ..\bench.exe .   # build the orchestrator
 .\bench.exe build                        # build everything (or: -filter rust,go/gin)
 .\bench.exe run                          # benchmark everything, both scenarios
 .\bench.exe run -filter node -scenario json -duration 15s -vus 50
+.\bench.exe run -docker -filter rust,go  # run the servers in containers (see Docker mode)
+.\bench.exe run -memory 2g               # one memory cap for every server
 .\bench.exe report results\2026-11-01_12-00-00   # re-render a report
 ```
 
 `-filter` takes comma-separated globs: `node` (the whole runtime), `node/nest*`, `rust/axum,go/*`.
+`-memory` takes `4096`, `512m` or `4g`, and replaces `memory_mb` for every server, including the
+per-server overrides.
+
+### 🐳 Docker mode
+
+`-docker` runs each server from the `Dockerfile` in its folder, so you don't need Rust, Node, Bun,
+Deno, Python, Java or Visual Studio on the machine. Docker Desktop has to be running. For each
+server the runner:
+
+1. builds the image `api-bench/<runtime>-<framework>` (layers are cached, so after the first build
+   this takes a second or two);
+2. starts the container `api-bench-<runtime>-<framework>` with `--memory` set to the server's
+   `memory_mb` (4 GB by default; `-memory` overrides it), no swap, `--cpuset-cpus` from
+   `server_cpus`, and the port published on `127.0.0.1:$PORT`;
+3. runs k6 on the host against it, exactly as in a native run, and samples the container's
+   cgroup v2 counters for CPU, memory, process count and OOM kills;
+4. removes the container and records the result.
+
+```powershell
+.\bench.exe build -docker                # optional: build every image up front
+.\bench.exe run -docker                  # caps from bench.config.yaml (4 GB default)
+.\bench.exe run -docker -memory 1g -filter python
+```
+
+A process the kernel OOM-kills in the container gets status **Out of memory**. The image build log
+is saved as `docker-build.log` next to each server's results.
+
+Docker results are useful to compare with each other, but not with native results. The servers
+run on Linux in the Docker Desktop VM, and every request goes through Docker's port forwarding.
+`server_cpus` selects CPUs of that VM, so it no longer keeps the server off k6's cores. Startup time
+includes creating the container.
+
+Linux also lifts the Windows-only single-process limit for Bun and Deno. Their `bench.json` has a
+`docker` block that replaces `maxWorkers` and `notes` in Docker mode only:
+
+```json
+"maxWorkers": 1,
+"notes": "single process: Bun has no cluster/reusePort support on Windows",
+"docker": { "maxWorkers": 0, "notes": "node:cluster, WORKERS processes with SO_REUSEPORT (Linux)" }
+```
+
+With the cap lifted, their images start the server through `cluster.js`, which forks `WORKERS`
+processes with `node:cluster`. In Bun each worker gets its own `SO_REUSEPORT` listener. In Deno
+the primary owns the socket and hands connections to the workers. `deno/hono` already uses
+`deno serve --parallel`. The heap hints become per worker: Bun gets `WORKER_HEAP_BYTES`, and Deno
+gets `DENO_V8_FLAGS`, because forked Deno workers don't inherit `--v8-flags`.
 
 Each run writes 📁 `results/<timestamp>/`:
 
@@ -116,7 +168,7 @@ servers:
 You can also switch `k6.executor` to `constant-arrival-rate` with a `rate` to measure latency at a
 fixed load instead of at maximum throughput.
 
-### 🧠 How the memory cap works (no Docker)
+### 🧠 How the memory cap works (native)
 
 The runner starts each server **suspended** and assigns it to a Windows **Job Object** with a
 `JobMemoryLimit` before it runs a single instruction. It resumes the server only after that. Every
@@ -128,10 +180,12 @@ Runtimes don't see the job limit when they size their heaps, so the runner also 
 
 | Variable | Value | Used by |
 |---|---|---|
+| `HOST` | `127.0.0.1` (`0.0.0.0` in Docker mode) | every server's listen address |
 | `MEMORY_MB` | the cap | JVM `-XX:MaxRAM` |
 | `HEAP_MB` | 80% of the cap | `GOMEMLIMIT`, Deno `--max-old-space-size` |
-| `WORKER_HEAP_MB` | `HEAP_MB / WORKERS` | Node (pm2) and `deno serve --parallel` |
-| `HEAP_BYTES` | `HEAP_MB` in bytes | Bun (`BUN_JSC_forceRAMSize`) |
+| `WORKER_HEAP_MB` | `HEAP_MB / WORKERS` | Node (pm2), Deno with several workers |
+| `HEAP_BYTES` | `HEAP_MB` in bytes | (spare, for runtimes sized in bytes) |
+| `WORKER_HEAP_BYTES` | `WORKER_HEAP_MB` in bytes | Bun (`BUN_JSC_forceRAMSize`) |
 
 You can use these in any `bench.json` as `${NAME}`, and they're also exported to the server's
 environment. A server that reaches the cap gets status **Out of memory** in the report.
@@ -152,9 +206,18 @@ Create `<runtime>/<framework>/` and put the server and a `bench.json` in it:
 
 - `build` steps run through `cmd /C` in that folder.
 - `start` is executed directly. A relative executable path is resolved against the folder.
-- The server must answer `GET /text` and `GET /json` on `127.0.0.1:$PORT`.
+- The server must answer `GET /text` and `GET /json` on `$HOST:$PORT`, with `HOST` defaulting
+  to `127.0.0.1`.
+- For Docker mode, add a `Dockerfile` whose `CMD` is the Linux form of `start`. The runner passes
+  the same environment (the variables above plus `env`), and `HOST` is `0.0.0.0`. The final image
+  needs `sh` and `grep` for the cgroup sampler, so use a `-slim` base rather than `scratch` or
+  distroless. COPY only the source files you need, so that local `node_modules`, `target` and so on
+  stay out of the image.
+- If the server can use more workers on Linux than on Windows, add
+  `"docker": { "maxWorkers": 0, "notes": "..." }`. It replaces `maxWorkers` (0 = no cap) and
+  `notes` in Docker mode only. Leave out a field to keep its native value.
 
-`bench list` picks the new server up automatically.
+`bench list` picks the new server up automatically, and marks servers that have no Dockerfile.
 
 ## ⚠️ Caveats
 
@@ -166,4 +229,5 @@ Create `<runtime>/<framework>/` and put the server and a `bench.json` in it:
   was still sending requests. k6 counts those hung requests as interrupted rather than failed,
   so the runner checks the per-second RPS itself. `deno serve --parallel` did this once in 5 runs
   during testing; re-run the server to confirm.
-- 🪟 Only Windows is implemented. A Linux backend would use cgroup v2 in `runner/internal/proc`.
+- 🪟 Only Windows is implemented as a host, even in Docker mode, because k6 is started through the
+  Job Object code. A Linux backend would use cgroup v2 in `runner/internal/proc`.
